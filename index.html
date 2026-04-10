@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DentAI — Scale Your Practice with AI</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #060606;
+    --surface: #111111;
+    --surface2: #1a1a1a;
+    --border: rgba(255,255,255,0.07);
+    --border-hover: rgba(255,107,43,0.25);
+    --text: #ffffff;
+    --muted: rgba(255,255,255,0.45);
+    --accent: #FF6B2B;
+    --accent2: #FF9A00;
+    --accent-dim: rgba(255,107,43,0.12);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+    overflow-x: hidden;
+    cursor: none;
+  }
+
+  /* ── CURSOR ── */
+  #cur {
+    position: fixed; width: 10px; height: 10px;
+    background: var(--accent); border-radius: 50%;
+    pointer-events: none; z-index: 9999;
+    transition: transform 0.15s ease, width 0.2s, height 0.2s;
+    mix-blend-mode: normal;
+  }
+  #cur-ring {
+    position: fixed; width: 38px; height: 38px;
+    border: 1px solid rgba(255,107,43,0.35); border-radius: 50%;
+    pointer-events: none; z-index: 9998;
+    transition: border-color 0.3s;
+  }
+  #glow-follow {
+    position: fixed; width: 320px; height: 320px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,107,43,0.055) 0%, transparent 70%);
+    pointer-events: none; z-index: 1;
+    transform: translate(-50%,-50%);
+  }
+
+  /* ── CANVAS ── */
+  #pc {
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 0; opacity: 0.5;
+  }
+
+  /* ── GRID ── */
+  .grid-bg {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+  .grid-shimmer {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(105deg, transparent 40%, rgba(255,107,43,0.025) 50%, transparent 60%);
+    background-size: 300% 100%;
+    animation: shimmer 7s linear infinite;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  /* ── SHAPES ── */
+  .shape {
+    position: absolute; border-radius: 50%;
+    pointer-events: none; filter: blur(80px);
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 500;
+    padding: 14px 40px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(6,6,6,0.75); backdrop-filter: blur(24px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-logo {
+    font-size: 17px; font-weight: 800; letter-spacing: -0.5px;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .nav-logo em { color: var(--accent); font-style: normal; }
+  .nav-pill {
+    display: flex; gap: 4px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 100px; padding: 5px;
+  }
+  .nav-pill a {
+    color: var(--muted); text-decoration: none; font-size: 13px;
+    padding: 7px 18px; border-radius: 100px; transition: all 0.2s;
+  }
+  .nav-pill a:hover, .nav-pill a.active {
+    color: white; background: rgba(255,255,255,0.07);
+  }
+  .nav-right { display: flex; align-items: center; gap: 12px; }
+  .nav-phone {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--surface); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; cursor: none; transition: all 0.2s;
+  }
+  .nav-phone:hover { border-color: var(--border-hover); background: var(--accent-dim); }
+  .btn-nav {
+    background: var(--accent); color: white; border: none;
+    padding: 9px 22px; border-radius: 100px; font-size: 13px;
+    font-weight: 600; cursor: none; transition: all 0.25s;
+    position: relative; overflow: hidden;
+  }
+  .btn-nav::after {
+    content: ''; position: absolute; inset: -1px; border-radius: 100px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
+    transform: translateX(-100%); transition: transform 0.4s;
+  }
+  .btn-nav:hover { box-shadow: 0 0 24px rgba(255,107,43,0.5); transform: translateY(-1px); }
+  .btn-nav:hover::after { transform: translateX(100%); }
+  @media(max-width:700px){.nav-pill,.nav-phone{display:none;}nav{padding:14px 20px;}}
+
+  /* ── HERO ── */
+  #hero {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 130px 40px 90px; position: relative; overflow: hidden; z-index: 2;
+  }
+  .hero-bg-gradient {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 90% 70% at 50% -10%, rgba(255,107,43,0.14) 0%, transparent 65%),
+      radial-gradient(ellipse 60% 60% at 85% 60%, rgba(124,58,237,0.07) 0%, transparent 55%),
+      radial-gradient(ellipse 50% 50% at 15% 70%, rgba(59,130,246,0.06) 0%, transparent 55%);
+    animation: hbg 10s ease-in-out infinite alternate;
+  }
+  @keyframes hbg { 0%{opacity:0.7;transform:scale(1)} 100%{opacity:1;transform:scale(1.04)} }
+
+  .hero-beam {
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 1px; height: 55%;
+    background: linear-gradient(to bottom, transparent, rgba(255,107,43,0.6), transparent);
+    animation: beam 4s ease-in-out infinite;
+  }
+  @keyframes beam { 0%,100%{opacity:0.15} 50%{opacity:0.5} }
+
+  .hero-beam-wide {
+    position: absolute; top: -5%; left: 50%; transform: translateX(-50%);
+    width: 400px; height: 300px; pointer-events: none;
+    background: radial-gradient(ellipse 100% 100% at 50% 0%, rgba(255,107,43,0.08) 0%, transparent 70%);
+  }
+
+  .float-tag {
+    position: absolute; display: flex; align-items: center; gap: 8px;
+    background: rgba(17,17,17,0.92); border: 1px solid var(--border);
+    padding: 10px 16px; border-radius: 12px; font-size: 13px;
+    backdrop-filter: blur(16px); animation: ftag 5s ease-in-out infinite;
+  }
+  .float-tag .dot { width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pd 2s infinite; }
+  .ft1 { top: 28%; right: 6%; animation-delay: 0s; }
+  .ft2 { bottom: 22%; left: 5%; animation-delay: 2.5s; }
+  @keyframes ftag { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+  @keyframes pd { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.6)} }
+  @media(max-width:700px){.float-tag{display:none;}}
+
+  .hero-inner { max-width: 860px; text-align: center; position: relative; z-index: 3; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent-dim); border: 1px solid rgba(255,107,43,0.22);
+    padding: 6px 16px; border-radius: 100px; font-size: 11.5px;
+    color: var(--accent); font-weight: 600; letter-spacing: 0.8px;
+    text-transform: uppercase; margin-bottom: 36px;
+  }
+  .badge .bl { width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pd 2s infinite; }
+
+  .hero-h1 {
+    font-size: clamp(52px, 9vw, 100px);
+    font-weight: 900; line-height: 0.95; letter-spacing: -4px;
+    margin-bottom: 28px;
+  }
+  .hero-h1 .l1 { display: block; color: white; }
+  .hero-h1 .l2 {
+    display: block;
+    background: linear-gradient(120deg, var(--accent) 0%, var(--accent2) 55%, #FFD166 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-sub {
+    font-size: clamp(15px, 1.8vw, 19px); color: var(--muted);
+    max-width: 520px; margin: 0 auto 52px; line-height: 1.65;
+  }
+
+  .hero-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--accent); color: white; border: none;
+    padding: 16px 32px; border-radius: 14px; font-size: 15px;
+    font-weight: 700; cursor: none; text-decoration: none;
+    position: relative; overflow: hidden;
+    transition: all 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .btn-primary .arrow-circle {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(255,255,255,0.25);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; transition: transform 0.3s;
+  }
+  .btn-primary:hover { transform: translateY(-3px); box-shadow: 0 0 48px rgba(255,107,43,0.55), 0 10px 40px rgba(255,107,43,0.3); }
+  .btn-primary:hover .arrow-circle { transform: translateX(3px); }
+  .btn-primary::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 50%);
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .btn-primary:hover::before { opacity: 1; }
+  .btn-primary::after {
+    content: ''; position: absolute;
+    top: -1px; left: -100%; width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.8), transparent);
+    animation: borderBeam 2.5s linear infinite;
+  }
+  @keyframes borderBeam { 0%{left:-100%} 100%{left:200%} }
+
+  .btn-ghost {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--border); padding: 16px 28px;
+    border-radius: 14px; font-size: 15px; font-weight: 500;
+    cursor: none; text-decoration: none;
+    transition: all 0.25s;
+  }
+  .btn-ghost:hover { color: white; border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.04); }
+
+  .hero-stats {
+    display: flex; gap: 0; justify-content: center; flex-wrap: wrap;
+    margin-top: 80px; padding-top: 40px;
+    border-top: 1px solid var(--border);
+  }
+  .stat { text-align: center; padding: 0 36px; }
+  .stat + .stat { border-left: 1px solid var(--border); }
+  .stat-n { font-size: 36px; font-weight: 900; letter-spacing: -1.5px; line-height: 1; }
+  .stat-n .ac { color: var(--accent); }
+  .stat-l { font-size: 11px; color: var(--muted); margin-top: 6px; letter-spacing: 0.7px; text-transform: uppercase; }
+  @media(max-width:600px){.stat{padding:16px 20px;}.stat+.stat{border-left:none;border-top:1px solid var(--border)}.hero-stats{flex-direction:column;align-items:center;}}
+
+  /* ── VALUE PROPS ── */
+  #value {
+    padding: 130px 40px; max-width: 1160px;
+    margin: 0 auto; position: relative; z-index: 2;
+  }
+  .sec-eyebrow { font-size: 11.5px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; font-weight: 700; margin-bottom: 14px; }
+  .sec-title { font-size: clamp(34px, 5vw, 58px); font-weight: 900; letter-spacing: -2.5px; line-height: 1.05; margin-bottom: 16px; }
+  .sec-sub { font-size: 17px; color: var(--muted); max-width: 460px; line-height: 1.65; margin-bottom: 64px; }
+
+  .value-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+  }
+
+  .vcard {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 22px; padding: 38px;
+    position: relative; overflow: hidden;
+    transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.4s, border-color 0.3s;
+    cursor: none;
+  }
+  .vcard-glow {
+    position: absolute; top: -60px; right: -60px;
+    width: 200px; height: 200px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,107,43,0.08) 0%, transparent 70%);
+    pointer-events: none; opacity: 0; transition: opacity 0.4s;
+  }
+  .vcard:hover .vcard-glow { opacity: 1; }
+  .vcard::before {
+    content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    transition: left 0.6s;
+  }
+  .vcard:hover { transform: translateY(-8px); border-color: rgba(255,107,43,0.18); box-shadow: 0 24px 70px rgba(0,0,0,0.5), 0 0 40px rgba(255,107,43,0.08); }
+  .vcard:hover::before { left: 100%; }
+
+  .vcard-icon {
+    width: 54px; height: 54px; border-radius: 16px;
+    background: var(--accent-dim); border: 1px solid rgba(255,107,43,0.18);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; margin-bottom: 26px;
+    transition: all 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .vcard:hover .vcard-icon { transform: scale(1.15) rotate(-8deg); background: rgba(255,107,43,0.2); }
+
+  .vcard-title { font-size: 21px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 12px; }
+  .vcard-desc { font-size: 14.5px; color: var(--muted); line-height: 1.7; }
+  .vcard-metric {
+    margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--border);
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .metric-big { font-size: 30px; font-weight: 900; color: var(--accent); letter-spacing: -1px; }
+  .metric-txt { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+
+  .vcard-list { list-style: none; margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .vcard-list li { font-size: 13.5px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .vcard-list li::before { content: '✓'; color: var(--accent); font-weight: 900; font-size: 11px; }
+
+  /* ── PROOF ── */
+  #proof {
+    padding: 130px 40px; background: #0c0c0c;
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    position: relative; overflow: hidden; z-index: 2;
+  }
+  .proof-inner { max-width: 1160px; margin: 0 auto; }
+
+  .tgrid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 18px; margin-top: 56px;
+  }
+  @media(max-width:900px){.tgrid{grid-template-columns:1fr 1fr;}}
+  @media(max-width:560px){.tgrid{grid-template-columns:1fr;}}
+
+  .tcard {
+    border-radius: 20px; padding: 28px;
+    position: relative; overflow: hidden;
+    transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.4s;
+    cursor: none;
+  }
+  .tcard:hover { transform: translateY(-10px) scale(1.02); box-shadow: 0 24px 60px rgba(0,0,0,0.35); }
+
+  .tc-orange { background: #FF6B2B; }
+  .tc-yellow { background: #F5C518; color: #1a1100; }
+  .tc-green  { background: #00C896; }
+  .tc-purple { background: #7B2FE0; }
+  .tc-blue   { background: #2563EB; }
+  .tc-teal   { background: #0891B2; }
+
+  .tc-yellow .tq, .tc-yellow .ta-name, .tc-yellow .ta-role { color: #2a1a00; }
+  .tc-yellow .ta-role { opacity: 0.65; }
+
+  .tq { font-size: 14px; line-height: 1.6; font-weight: 500; margin-bottom: 20px; }
+  .ta { display: flex; align-items: center; gap: 10px; }
+  .ta-av {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: rgba(255,255,255,0.28); display: flex;
+    align-items: center; justify-content: center; font-size: 15px;
+  }
+  .ta-name { font-size: 13px; font-weight: 800; color: white; }
+  .ta-role  { font-size: 11.5px; color: rgba(255,255,255,0.65); margin-top: 2px; }
+
+  .trust-row {
+    display: flex; flex-wrap: wrap; gap: 32px; justify-content: center;
+    margin-top: 64px; padding-top: 48px; border-top: 1px solid var(--border);
+  }
+  .trust-item {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 13.5px; color: var(--muted); font-weight: 500;
+  }
+  .trust-item .ti { font-size: 18px; }
+
+  /* ── CTA ── */
+  #cta {
+    padding: 160px 40px; text-align: center;
+    position: relative; overflow: hidden; z-index: 2;
+  }
+  .cta-glow {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 65% 65% at 50% 50%, rgba(255,107,43,0.13) 0%, transparent 70%);
+    animation: ctag 5s ease-in-out infinite alternate;
+  }
+  @keyframes ctag { 0%{opacity:0.5;} 100%{opacity:1;} }
+
+  .cta-inner { max-width: 680px; margin: 0 auto; position: relative; z-index: 3; }
+  .cta-h2 { font-size: clamp(42px, 7vw, 76px); font-weight: 900; letter-spacing: -3px; line-height: 0.97; margin-bottom: 24px; }
+  .cta-sub { font-size: 17px; color: var(--muted); margin-bottom: 48px; line-height: 1.65; }
+
+  .cta-form { display: flex; gap: 12px; max-width: 460px; margin: 0 auto; flex-wrap: wrap; }
+  .cta-input {
+    flex: 1; min-width: 180px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: white; padding: 16px 20px; border-radius: 12px;
+    font-size: 14.5px; outline: none; transition: border-color 0.3s;
+  }
+  .cta-input:focus { border-color: rgba(255,107,43,0.45); box-shadow: 0 0 0 3px rgba(255,107,43,0.08); }
+  .cta-input::placeholder { color: var(--muted); }
+
+  .cta-note { margin-top: 16px; font-size: 12px; color: var(--muted); }
+
+  /* ── FOOTER ── */
+  footer {
+    padding: 32px 40px; border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    position: relative; z-index: 2; flex-wrap: wrap; gap: 16px;
+  }
+  .footer-logo { font-size: 15px; font-weight: 800; letter-spacing: -0.3px; }
+  .footer-logo em { color: var(--accent); font-style: normal; }
+  .footer-links { display: flex; gap: 24px; }
+  .footer-links a { color: var(--muted); text-decoration: none; font-size: 13px; transition: color 0.2s; }
+  .footer-links a:hover { color: white; }
+  .footer-copy { font-size: 12px; color: var(--muted); }
+
+  /* ── REVEAL ── */
+  .rv { opacity: 0; transform: translateY(28px); transition: opacity 0.8s cubic-bezier(0.16,1,0.3,1), transform 0.8s cubic-bezier(0.16,1,0.3,1); }
+  .rv.vis { opacity: 1; transform: translateY(0); }
+
+  @media(max-width:600px){
+    #hero,#value,#proof,#cta{padding-left:20px;padding-right:20px;}
+    footer{padding:24px 20px; flex-direction:column; text-align:center;}
+    .footer-links{justify-content:center;}
+    .cta-form{flex-direction:column;}
+    .cta-input,.btn-primary{width:100%;justify-content:center;}
+    .value-grid{grid-template-columns:1fr;}
+    nav{padding:14px 20px;}
+  }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.85); backdrop-filter: blur(12px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; opacity: 0; pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 24px; padding: 48px; max-width: 520px; width: 100%;
+    position: relative; transform: translateY(24px) scale(0.97);
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal-overlay.open .modal { transform: translateY(0) scale(1); }
+
+  .modal-close {
+    position: absolute; top: 20px; right: 20px;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: rgba(255,255,255,0.07); border: 1px solid var(--border);
+    color: var(--muted); font-size: 16px; cursor: none;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .modal-close:hover { background: rgba(255,255,255,0.12); color: white; }
+
+  .modal-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--accent-dim); border: 1px solid rgba(255,107,43,0.22);
+    padding: 5px 12px; border-radius: 100px; font-size: 11px;
+    color: var(--accent); font-weight: 600; letter-spacing: 0.8px;
+    text-transform: uppercase; margin-bottom: 20px;
+  }
+
+  .modal h2 {
+    font-size: 28px; font-weight: 900; letter-spacing: -1px;
+    margin-bottom: 8px; line-height: 1.1;
+  }
+  .modal p.modal-sub {
+    font-size: 14px; color: var(--muted); margin-bottom: 32px; line-height: 1.6;
+  }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media(max-width:500px){ .form-grid { grid-template-columns: 1fr; } }
+
+  .form-field { display: flex; flex-direction: column; gap: 7px; }
+  .form-field.full { grid-column: 1 / -1; }
+  .form-field label { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; }
+  .form-field input, .form-field textarea {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+    color: white; padding: 12px 16px; border-radius: 10px;
+    font-size: 14px; outline: none; transition: border-color 0.3s;
+    font-family: inherit;
+  }
+  .form-field input:focus, .form-field textarea:focus {
+    border-color: rgba(255,107,43,0.45);
+    box-shadow: 0 0 0 3px rgba(255,107,43,0.08);
+  }
+  .form-field input::placeholder, .form-field textarea::placeholder { color: rgba(255,255,255,0.2); }
+  .form-field textarea { resize: none; height: 88px; }
+
+  .btn-submit {
+    width: 100%; margin-top: 20px;
+    background: var(--accent); color: white; border: none;
+    padding: 16px 32px; border-radius: 12px; font-size: 15px;
+    font-weight: 700; cursor: none; transition: all 0.3s;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    position: relative; overflow: hidden;
+  }
+  .btn-submit:hover { box-shadow: 0 0 36px rgba(255,107,43,0.5); transform: translateY(-2px); }
+  .btn-submit:disabled { opacity: 0.6; transform: none; }
+
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white; border-radius: 50%;
+    animation: spin 0.7s linear infinite; display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(20px);
+    z-index: 2000; padding: 16px 28px; border-radius: 14px;
+    font-size: 14px; font-weight: 600; opacity: 0;
+    transition: all 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.success { background: #00C896; color: white; }
+  .toast.error { background: #ef4444; color: white; }
+
+  /* ── SUCCESS STATE ── */
+  .success-state {
+    text-align: center; padding: 20px 0; display: none;
+  }
+  .success-icon {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: rgba(0,200,150,0.15); border: 2px solid rgba(0,200,150,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px; margin: 0 auto 20px;
+  }
+  .success-state h3 { font-size: 22px; font-weight: 900; margin-bottom: 10px; }
+  .success-state p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<!-- Cursor -->
+<div id="cur"></div>
+<div id="cur-ring"></div>
+<div id="glow-follow"></div>
+
+<!-- Particle canvas -->
+<canvas id="pc"></canvas>
+
+<!-- Grid background -->
+<div class="grid-bg"></div>
+
+<!-- Parallax shapes -->
+<div class="shape" id="s1" style="width:700px;height:700px;top:-15%;left:-18%;background:var(--accent);opacity:0.028;filter:blur(100px);"></div>
+<div class="shape" id="s2" style="width:500px;height:500px;bottom:-10%;right:-12%;background:#7B2FE0;opacity:0.032;filter:blur(100px);"></div>
+<div class="shape" id="s3" style="width:350px;height:350px;top:55%;right:22%;background:#2563EB;opacity:0.025;filter:blur(80px);"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">🦷 Dent<em>AI</em></div>
+  <div class="nav-pill">
+    <a href="#" class="active">Home</a>
+    <a href="#value">Systems</a>
+    <a href="#proof">Results</a>
+    <a href="#cta">Contact</a>
+  </div>
+  <div class="nav-right">
+    <div class="nav-phone">📞</div>
+    <button class="btn-nav" onclick="openModal()">Book a Call</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-bg-gradient"></div>
+  <div class="hero-beam"></div>
+  <div class="hero-beam-wide"></div>
+  <div class="grid-shimmer"></div>
+
+  <div class="float-tag ft1">
+    <div class="dot"></div>
+    <span>🤖 AI Systems Active</span>
+  </div>
+  <div class="float-tag ft2">
+    <span>📈 +340% avg. revenue growth</span>
+  </div>
+
+  <div class="hero-inner">
+    <div class="badge"><span class="bl"></span> AI-Powered Dental Growth Agency</div>
+
+    <h1 class="hero-h1">
+      <span class="l1">Scale Your Practice.</span>
+      <span class="l2">Automate Everything.</span>
+    </h1>
+
+    <p class="hero-sub">
+      We install proven AI systems into dental clinics that automate patient acquisition, follow-ups &amp; bookings — so you focus on dentistry, not marketing.
+    </p>
+
+    <div class="hero-actions">
+      <a href="#" class="btn-primary" onclick="openModal(); return false;">
+        Book Free Strategy Call
+        <span class="arrow-circle">→</span>
+      </a>
+      <a href="#proof" class="btn-ghost">See Real Results ↓</a>
+    </div>
+
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="stat-n"><span class="cu" data-t="340">0</span><span class="ac">%</span></div>
+        <div class="stat-l">Avg Revenue Growth</div>
+      </div>
+      <div class="stat">
+        <div class="stat-n"><span class="cu" data-t="127">0</span><span class="ac">+</span></div>
+        <div class="stat-l">Clinics Scaled</div>
+      </div>
+      <div class="stat">
+        <div class="stat-n"><span class="ac">$</span><span class="cu" data-t="4">0</span><span class="ac">M+</span></div>
+        <div class="stat-l">Revenue Generated</div>
+      </div>
+      <div class="stat">
+        <div class="stat-n"><span class="cu" data-t="14">0</span><span class="ac">d</span></div>
+        <div class="stat-l">Avg Time to First Result</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- VALUE PROPS -->
+<section id="value">
+  <div class="rv">
+    <div class="sec-eyebrow">— Our AI Systems</div>
+    <h2 class="sec-title">Three Engines.<br>Infinite Growth.</h2>
+    <p class="sec-sub">We don't do generic marketing. We install automated revenue systems built specifically for dental practices.</p>
+  </div>
+
+  <div class="value-grid">
+    <div class="vcard rv">
+      <div class="vcard-glow"></div>
+      <div class="vcard-icon">🤖</div>
+      <h3 class="vcard-title">AI Patient Acquisition</h3>
+      <p class="vcard-desc">Our AI engine runs 24/7, attracting high-value patients through hyper-targeted campaigns across search, social, and local channels — fully automated.</p>
+      <ul class="vcard-list">
+        <li>Hyper-local ad targeting</li>
+        <li>AI-optimised creatives</li>
+        <li>Real-time budget reallocation</li>
+      </ul>
+      <div class="vcard-metric">
+        <div class="metric-big">+280%</div>
+        <div class="metric-txt">more qualified<br>leads per month</div>
+      </div>
+    </div>
+
+    <div class="vcard rv">
+      <div class="vcard-glow"></div>
+      <div class="vcard-icon">📲</div>
+      <h3 class="vcard-title">Automated Follow-Up Engine</h3>
+      <p class="vcard-desc">Never lose a lead again. Our AI nurtures every prospect with personalised SMS, email and WhatsApp sequences that feel human — converting leads into booked chairs.</p>
+      <ul class="vcard-list">
+        <li>Multi-channel nurture flows</li>
+        <li>Personalised AI messaging</li>
+        <li>Objection-handling sequences</li>
+      </ul>
+      <div class="vcard-metric">
+        <div class="metric-big">73%</div>
+        <div class="metric-txt">higher show-up rate<br>vs industry avg</div>
+      </div>
+    </div>
+
+    <div class="vcard rv">
+      <div class="vcard-glow"></div>
+      <div class="vcard-icon">📅</div>
+      <h3 class="vcard-title">Smart Booking & Retention</h3>
+      <p class="vcard-desc">AI handles scheduling, reminders, and re-activation of dormant patients — filling your calendar consistently and reducing no-shows to near zero.</p>
+      <ul class="vcard-list">
+        <li>Automated appointment reminders</li>
+        <li>Dormant patient re-activation</li>
+        <li>Calendar gap-filling AI</li>
+      </ul>
+      <div class="vcard-metric">
+        <div class="metric-big">92%</div>
+        <div class="metric-txt">reduction in<br>no-show rates</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROOF -->
+<section id="proof">
+  <div class="grid-shimmer"></div>
+  <div class="proof-inner">
+    <div class="rv">
+      <div class="sec-eyebrow">— Real Results</div>
+      <h2 class="sec-title">Trusted by 127+<br>Dental Practices</h2>
+      <p class="sec-sub">Dentists who installed our AI systems didn't just grow — they transformed their entire practice.</p>
+    </div>
+
+    <div class="tgrid">
+      <div class="tcard tc-orange rv">
+        <p class="tq">"Within 60 days we went from 45 new patients a month to 128. Our front desk couldn't believe the calendar was actually full every single day."</p>
+        <div class="ta"><div class="ta-av">👨‍⚕️</div><div><div class="ta-name">Dr. Marcus Webb</div><div class="ta-role">General Dentist — Dallas, TX</div></div></div>
+      </div>
+      <div class="tcard tc-yellow rv">
+        <p class="tq">"The AI follow-up system alone recovered $84,000 in the first quarter. Leads that would've gone cold are now booking implants and Invisalign."</p>
+        <div class="ta"><div class="ta-av">👩‍⚕️</div><div><div class="ta-name">Dr. Priya Sharma</div><div class="ta-role">Cosmetic Dentist — Miami, FL</div></div></div>
+      </div>
+      <div class="tcard tc-green rv">
+        <p class="tq">"I was skeptical about AI. But DentAI showed me the data. We scaled from one location to three in 18 months. The systems genuinely run themselves."</p>
+        <div class="ta"><div class="ta-av">🧑‍⚕️</div><div><div class="ta-name">Dr. James Okonkwo</div><div class="ta-role">Multi-Location Owner — Chicago, IL</div></div></div>
+      </div>
+      <div class="tcard tc-purple rv">
+        <p class="tq">"Our no-show rate dropped from 31% to under 4% in six weeks. The automated reminder sequences are eerily effective at re-engaging patients."</p>
+        <div class="ta"><div class="ta-av">👩‍⚕️</div><div><div class="ta-name">Dr. Sofia Reyes</div><div class="ta-role">Orthodontist — Phoenix, AZ</div></div></div>
+      </div>
+      <div class="tcard tc-blue rv">
+        <p class="tq">"ROI is unreal. We spend $4k/month with DentAI and generate $28k in new patient revenue every single month. I wish I'd started two years earlier."</p>
+        <div class="ta"><div class="ta-av">👨‍⚕️</div><div><div class="ta-name">Dr. Ryan Keller</div><div class="ta-role">Implant Specialist — Austin, TX</div></div></div>
+      </div>
+      <div class="tcard tc-teal rv">
+        <p class="tq">"I finally have a real marketing team working 24/7. The AI doesn't sleep, doesn't take weekends off — and it never misses a single lead. Ever."</p>
+        <div class="ta"><div class="ta-av">👩‍⚕️</div><div><div class="ta-name">Dr. Amara Osei</div><div class="ta-role">Pediatric Dentist — Atlanta, GA</div></div></div>
+      </div>
+    </div>
+
+    <div class="trust-row rv">
+      <div class="trust-item"><span class="ti">⚡</span> Live in 14 days</div>
+      <div class="trust-item"><span class="ti">🔒</span> HIPAA Compliant</div>
+      <div class="trust-item"><span class="ti">🎯</span> Results Guaranteed</div>
+      <div class="trust-item"><span class="ti">📞</span> Dedicated Account Manager</div>
+      <div class="trust-item"><span class="ti">🔄</span> Cancel Anytime</div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="cta">
+  <div class="cta-glow"></div>
+  <div class="cta-inner rv">
+    <div class="sec-eyebrow" style="justify-content:center;display:flex;margin-bottom:16px;">— Get Started Today</div>
+    <h2 class="cta-h2">Ready to Fill<br>Your Calendar?</h2>
+    <p class="cta-sub">Book a free 30-minute strategy call. We'll audit your current patient acquisition and show you exactly how AI can scale your practice — no fluff, just a clear plan.</p>
+    <div class="cta-form">
+      <input type="email" class="cta-input" id="cta-email" placeholder="your@email.com">
+      <a href="#" class="btn-primary" id="cta-btn" onclick="submitLead(); return false;">
+        <span id="cta-btn-text">Book Free Call</span>
+        <div class="spinner" id="cta-spinner"></div>
+        <span class="arrow-circle" id="cta-arrow">→</span>
+      </a>
+    </div>
+    <p class="cta-note" id="cta-note">No credit card required · Free 30-min strategy session · 127+ clinics already scaled</p>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">🦷 Dent<em>AI</em></div>
+  <div class="footer-links">
+    <a href="#">Privacy</a>
+    <a href="#">Terms</a>
+    <a href="#">HIPAA</a>
+  </div>
+  <div class="footer-copy">© 2025 DentAI Agency. All rights reserved.</div>
+</footer>
+
+<!-- BOOKING MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+
+    <!-- Form State -->
+    <div id="form-state">
+      <div class="modal-badge">🚀 Free Strategy Call</div>
+      <h2>Let's Scale Your Practice</h2>
+      <p class="modal-sub">Fill in your details and our team will reach out within 24 hours to book your free 30-minute strategy session.</p>
+
+      <div class="form-grid">
+        <div class="form-field">
+          <label>Full Name *</label>
+          <input type="text" id="f-name" placeholder="Dr. John Smith">
+        </div>
+        <div class="form-field">
+          <label>Email *</label>
+          <input type="email" id="f-email" placeholder="john@clinic.com">
+        </div>
+        <div class="form-field">
+          <label>Phone *</label>
+          <input type="tel" id="f-phone" placeholder="+1 (555) 000-0000">
+        </div>
+        <div class="form-field">
+          <label>Practice Name</label>
+          <input type="text" id="f-practice" placeholder="Smith Dental Clinic">
+        </div>
+        <div class="form-field full">
+          <label>City / Location</label>
+          <input type="text" id="f-location" placeholder="Dallas, TX">
+        </div>
+        <div class="form-field full">
+          <label>Anything specific you want to discuss?</label>
+          <textarea id="f-message" placeholder="e.g. We're struggling with no-shows and want more implant patients..."></textarea>
+        </div>
+      </div>
+
+      <button class="btn-submit" id="submit-btn" onclick="submitBooking()">
+        <span id="submit-text">Book My Free Strategy Call →</span>
+        <div class="spinner" id="submit-spinner"></div>
+      </button>
+    </div>
+
+    <!-- Success State -->
+    <div class="success-state" id="success-state">
+      <div class="success-icon">🎉</div>
+      <h3>You're Booked In!</h3>
+      <p>Thanks! Our team will reach out within 24 hours to confirm your free strategy session. Get ready to scale! 🚀</p>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── SUPABASE SETUP ──
+const SUPABASE_URL = 'https://tsolxrjqrmxbsdoqeepo.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzb2x4cmpxcm14YnNkb3FlZXBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0ODM5MjAsImV4cCI6MjA4OTA1OTkyMH0.7TUvdvMWqZxO7cE-Q2iwuIPVFlDMa_SQlV2e3QDA3M0';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── TOAST ──
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ── MODAL ──
+function openModal() {
+  document.getElementById('modal-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function handleOverlayClick(e) {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── SUBMIT BOOKING ──
+async function submitBooking() {
+  const name = document.getElementById('f-name').value.trim();
+  const email = document.getElementById('f-email').value.trim();
+  const phone = document.getElementById('f-phone').value.trim();
+  const practice = document.getElementById('f-practice').value.trim();
+  const location = document.getElementById('f-location').value.trim();
+  const message = document.getElementById('f-message').value.trim();
+
+  if (!name) { showToast('Please enter your name', 'error'); return; }
+  if (!email || !email.includes('@')) { showToast('Please enter a valid email', 'error'); return; }
+  if (!phone) { showToast('Please enter your phone number', 'error'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  const txt = document.getElementById('submit-text');
+  const spin = document.getElementById('submit-spinner');
+  btn.disabled = true;
+  txt.style.display = 'none';
+  spin.style.display = 'block';
+
+  try {
+    const { error } = await db.from('bookings').insert([{
+      name, email, phone,
+      practice_name: practice,
+      location,
+      message,
+      status: 'pending'
+    }]);
+
+    if (error) throw error;
+
+    document.getElementById('form-state').style.display = 'none';
+    document.getElementById('success-state').style.display = 'block';
+    showToast('🎉 Booking confirmed! We\'ll be in touch soon.');
+
+  } catch (err) {
+    console.error(err);
+    showToast('Something went wrong. Please try again.', 'error');
+    btn.disabled = false;
+    txt.style.display = 'block';
+    spin.style.display = 'none';
+  }
+}
+
+// ── SUBMIT LEAD (CTA email form) ──
+async function submitLead() {
+  const emailInput = document.getElementById('cta-email');
+  const email = emailInput.value.trim();
+
+  if (!email || !email.includes('@')) {
+    showToast('Please enter a valid email', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('cta-btn');
+  const txt = document.getElementById('cta-btn-text');
+  const spin = document.getElementById('cta-spinner');
+  const arrow = document.getElementById('cta-arrow');
+  btn.style.pointerEvents = 'none';
+  txt.textContent = 'Sending...';
+  spin.style.display = 'block';
+  arrow.style.display = 'none';
+
+  try {
+    const { error } = await db.from('leads').insert([{
+      email,
+      source: 'cta_section',
+      status: 'new'
+    }]);
+
+    if (error && error.code !== '23505') throw error; // 23505 = duplicate email, that's fine
+
+    emailInput.value = '';
+    txt.textContent = '✓ Done!';
+    spin.style.display = 'none';
+    document.getElementById('cta-note').textContent = "🎉 We'll reach out within 24 hours. Check your inbox!";
+    showToast('Thanks! We\'ll be in touch within 24 hours 🎉');
+
+  } catch (err) {
+    console.error(err);
+    showToast('Something went wrong. Please try again.', 'error');
+    txt.textContent = 'Book Free Call';
+    spin.style.display = 'none';
+    arrow.style.display = 'flex';
+    btn.style.pointerEvents = 'all';
+  }
+}
+
+// ── CURSOR ──
+const cur = document.getElementById('cur');
+const ring = document.getElementById('cur-ring');
+const glow = document.getElementById('glow-follow');
+let mx = -200, my = -200, rx = -200, ry = -200;
+
+document.addEventListener('mousemove', e => {
+  mx = e.clientX; my = e.clientY;
+  cur.style.left = (mx - 5) + 'px';
+  cur.style.top = (my - 5) + 'px';
+  glow.style.left = mx + 'px';
+  glow.style.top = my + 'px';
+});
+
+(function trackRing() {
+  rx += (mx - rx) * 0.1;
+  ry += (my - ry) * 0.1;
+  ring.style.left = (rx - 19) + 'px';
+  ring.style.top = (ry - 19) + 'px';
+  requestAnimationFrame(trackRing);
+})();
+
+document.querySelectorAll('a,button,.vcard,.tcard').forEach(el => {
+  el.addEventListener('mouseenter', () => {
+    cur.style.transform = 'scale(2.2)';
+    ring.style.transform = 'scale(1.4)';
+    ring.style.borderColor = 'rgba(255,107,43,0.6)';
+  });
+  el.addEventListener('mouseleave', () => {
+    cur.style.transform = 'scale(1)';
+    ring.style.transform = 'scale(1)';
+    ring.style.borderColor = 'rgba(255,107,43,0.35)';
+  });
+});
+
+// ── PARTICLES ──
+const canvas = document.getElementById('pc');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+resize(); window.addEventListener('resize', resize);
+
+const pts = Array.from({length:55}, () => ({
+  x: Math.random() * W, y: Math.random() * H,
+  vx: (Math.random() - 0.5) * 0.25, vy: (Math.random() - 0.5) * 0.25,
+  r: Math.random() * 1.2 + 0.4, op: Math.random() * 0.35 + 0.08
+}));
+
+function drawPts() {
+  ctx.clearRect(0,0,W,H);
+  pts.forEach(p => {
+    p.x = (p.x + p.vx + W) % W;
+    p.y = (p.y + p.vy + H) % H;
+    pts.forEach(q => {
+      const d = Math.hypot(p.x-q.x, p.y-q.y);
+      if(d < 110) {
+        ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y);
+        ctx.strokeStyle = `rgba(255,107,43,${0.04*(1-d/110)})`;
+        ctx.lineWidth = 0.6; ctx.stroke();
+      }
+    });
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.fillStyle = `rgba(255,107,43,${p.op})`; ctx.fill();
+  });
+  requestAnimationFrame(drawPts);
+}
+drawPts();
+
+// ── PARALLAX ──
+const s1=document.getElementById('s1'), s2=document.getElementById('s2'), s3=document.getElementById('s3');
+window.addEventListener('scroll', () => {
+  const sy = window.scrollY;
+  s1.style.transform = `translateY(${sy*0.09}px)`;
+  s2.style.transform = `translateY(${-sy*0.07}px)`;
+  s3.style.transform = `translateY(${sy*0.11}px)`;
+});
+
+// ── SCROLL REVEAL ──
+const obs = new IntersectionObserver(entries => {
+  entries.forEach((e,i) => {
+    if(e.isIntersecting) {
+      const delay = e.target.closest('.value-grid,.tgrid') ?
+        Array.from(e.target.parentNode.children).indexOf(e.target) * 100 : 0;
+      setTimeout(() => e.target.classList.add('vis'), delay);
+    }
+  });
+}, {threshold:0.1});
+document.querySelectorAll('.rv').forEach(el => obs.observe(el));
+
+// ── COUNT UP ──
+function countUp(el, target, dur=2000) {
+  const step = target / (dur/16);
+  let val = 0;
+  const t = setInterval(() => {
+    val = Math.min(val + step, target);
+    el.textContent = Math.floor(val);
+    if(val >= target) clearInterval(t);
+  }, 16);
+}
+const cObs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if(e.isIntersecting) {
+      countUp(e.target, parseInt(e.target.dataset.t));
+      cObs.unobserve(e.target);
+    }
+  });
+}, {threshold:0.5});
+document.querySelectorAll('.cu').forEach(el => cObs.observe(el));
+
+// ── CURSOR PROXIMITY CARD GLOW ──
+document.querySelectorAll('.vcard').forEach(card => {
+  card.addEventListener('mousemove', e => {
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    card.style.background = `radial-gradient(circle at ${x}px ${y}px, rgba(255,107,43,0.06) 0%, var(--surface) 60%)`;
+  });
+  card.addEventListener('mouseleave', () => {
+    card.style.background = '';
+  });
+});
+
+// ── NAV ACTIVE ──
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('.nav-pill a');
+window.addEventListener('scroll', () => {
+  let curSection = '';
+  sections.forEach(s => { if(window.scrollY >= s.offsetTop - 120) curSection = s.id; });
+  navLinks.forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#'+curSection || (curSection==='' && a.getAttribute('href')==='#'));
+  });
+});
+</script>
+</body>
+</html>
